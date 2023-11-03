@@ -12,6 +12,7 @@ Usage: humblebundle-games [OPTIONS] --token <TOKEN>
 Options:
   -t, --token <TOKEN>  _simpleauth_sess cookie value
   -j, --json           return data in json
+  -s, --steamdb        adds steamdb info to json
   -h, --help           Print help
   -V, --version        Print version
 ```
@@ -29,4 +30,36 @@ cargo run --release -- --token {YOUR COOKIE}
 ## Run with nix flake
 ```
 nix run github:ayes-web/humblebundle-games -- --token {YOUR COOKIE}
+```
+
+
+## --json --steamdb output example
+
+```json
+[
+    {
+        "key": "Boomerang Fu",
+        "choice_url": "https://www.humblebundle.com/membership/february-2021",
+        "platform": "steam",
+        "url": "https://steamdb.info/app/965680/",
+        "user_score": 91.03,
+        "price_us": 14.99
+    },
+    {
+        "key": "Werewolf: The Apocalypse — Heart of the Forest",
+        "choice_url": "https://www.humblebundle.com/membership/february-2021",
+        "platform": "steam",
+        "url": "https://steamdb.info/app/1342620/",
+        "user_score": 79.29,
+        "price_us": 14.99
+    },
+    {
+        "key": "Trine 4: The Nightmare Prince",
+        "choice_url": "https://www.humblebundle.com/membership/february-2021",
+        "platform": "steam",
+        "url": "https://steamdb.info/app/690640/",
+        "user_score": 87.31,
+        "price_us": 29.99
+    },
+]
 ```

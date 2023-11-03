@@ -2,6 +2,7 @@
 
 use crate::api::{orders, AllTpks, Order};
 use crate::month::{month_games, MonthPageOptionsDataEnum, MonthPageOptionsDataGamesChoiceEnum};
+use crate::steamdb::{SearchResult, SteamDB};
 use clap::Parser;
 use futures::future;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -13,6 +14,7 @@ use std::time::Duration;
 
 mod api;
 mod month;
+mod steamdb;
 
 /// Humble bundle keys
 #[derive(Parser, Debug)]
@@ -25,6 +27,10 @@ struct Args {
     /// return data in json
     #[arg(short, long)]
     json: bool,
+
+    /// adds steamdb info to json
+    #[arg(short, long)]
+    steamdb: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -59,11 +65,25 @@ struct ParsableFormat {
     key: String,
     choice_url: Option<String>,
     platform: String,
+
+    #[serde(flatten)]
+    extra: Option<SearchResult>,
 }
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+
+    let s: SteamDB = if args.steamdb {
+        SteamDB::new().await
+    } else {
+        SteamDB {
+            id: String::new(),
+            url: String::new(),
+            api_key: String::new(),
+        }
+    };
+
     let mut parsable_keys: Vec<ParsableFormat> = vec![];
 
     let keys = keys_page(args.token.clone()).await;
@@ -136,6 +156,7 @@ async fn main() {
                                 key: id.human_name.clone(),
                                 choice_url: url,
                                 platform: id.key_type.clone(),
+                                extra: None,
                             })
                         }
                     }
@@ -152,11 +173,40 @@ async fn main() {
                             key: id.human_name.clone(),
                             choice_url: None,
                             platform: id.key_type.clone(),
+                            extra: None,
                         })
                     }
                 }
             }
         }
+    }
+
+    if args.json && args.steamdb {
+        let l = parsable_keys
+            .iter()
+            .filter(|k| k.platform == "steam")
+            .count();
+
+        let steamdb_pb = ProgressBar::new(l as u64);
+        steamdb_pb.set_style(
+            ProgressStyle::with_template("{prefix:.bold.dim}[{pos}/{len}] {spinner} {wide_msg}")
+                .unwrap()
+                .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
+        );
+        steamdb_pb.enable_steady_tick(Duration::from_millis(120));
+        steamdb_pb.set_message("Adding extra info from steamdb");
+
+        for key in parsable_keys.iter_mut() {
+            if key.platform != "steam" {
+                continue;
+            }
+
+            key.extra = Some(s.search(&key.key).await);
+            steamdb_pb.inc(1)
+        }
+
+        steamdb_pb.set_message("Finished fetching extra info from steamdb");
+        steamdb_pb.finish_and_clear()
     }
 
     if !args.json {
