@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub struct SteamDB {
-   pub id: String,
+    pub id: String,
     pub url: String,
     pub api_key: String,
 }
@@ -43,9 +43,9 @@ pub struct SearchOutputInnerHit {
 
 #[derive(Serialize, Debug)]
 pub struct SearchResult {
-    url: String,
-    user_score: Option<f64>,
-    price_us: f64,
+    pub url: String,
+    pub user_score: Option<f64>,
+    pub price_us: f64,
 }
 
 impl SteamDB {

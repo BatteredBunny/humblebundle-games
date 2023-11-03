@@ -10,11 +10,11 @@ Humble bundle keys
 Usage: humblebundle-games [OPTIONS] --token <TOKEN>
 
 Options:
-  -t, --token <TOKEN>  _simpleauth_sess cookie value
-  -j, --json           return data in json
-  -s, --steamdb        adds steamdb info to json
-  -h, --help           Print help
-  -V, --version        Print version
+  -t, --token <TOKEN>    _simpleauth_sess cookie value
+  -s, --steamdb          adds steamdb info to parsable formats like json and csv
+  -f, --format <FORMAT>  format to output data in [default: text] [possible values: json, csv, text]
+  -h, --help             Print help
+  -V, --version          Print version
 ```
 
 ## Usage
@@ -33,7 +33,11 @@ nix run github:ayes-web/humblebundle-games -- --token {YOUR COOKIE}
 ```
 
 
-## --json --steamdb output example
+## Output example
+
+``
+cargo run -- --format json --steamdb
+``
 
 ```json
 [

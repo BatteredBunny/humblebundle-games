@@ -2,19 +2,29 @@
 
 use crate::api::{orders, AllTpks, Order};
 use crate::month::{month_games, MonthPageOptionsDataEnum, MonthPageOptionsDataGamesChoiceEnum};
-use crate::steamdb::{SearchResult, SteamDB};
-use clap::Parser;
+use crate::steamdb::SteamDB;
+use clap::{Parser, ValueEnum};
 use futures::future;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use reqwest::Client;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
+use std::io;
 use std::time::Duration;
 
 mod api;
 mod month;
 mod steamdb;
+
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Default)]
+enum OutputFormat {
+    Json,
+    Csv,
+
+    #[default]
+    Text,
+}
 
 /// Humble bundle keys
 #[derive(Parser, Debug)]
@@ -24,13 +34,13 @@ struct Args {
     #[arg(short, long)]
     token: String,
 
-    /// return data in json
-    #[arg(short, long)]
-    json: bool,
-
-    /// adds steamdb info to json
+    /// adds steamdb info to parsable formats like json and csv
     #[arg(short, long)]
     steamdb: bool,
+
+    /// format to output data in
+    #[arg(short, long, default_value_t, value_enum)]
+    format: OutputFormat,
 }
 
 #[derive(Deserialize, Debug)]
@@ -66,8 +76,9 @@ struct ParsableFormat {
     choice_url: Option<String>,
     platform: String,
 
-    #[serde(flatten)]
-    extra: Option<SearchResult>,
+    url: Option<String>,
+    user_score: Option<f64>,
+    price_us: Option<f64>,
 }
 
 #[tokio::main]
@@ -148,16 +159,21 @@ async fn main() {
                             "https://www.humblebundle.com/membership/{choice_url}",
                         ));
 
-                        if !args.json {
-                            keys_amount += 1;
-                            id.display(keys_amount, url);
-                        } else {
-                            parsable_keys.push(ParsableFormat {
-                                key: id.human_name.clone(),
-                                choice_url: url,
-                                platform: id.key_type.clone(),
-                                extra: None,
-                            })
+                        match args.format {
+                            OutputFormat::Json | OutputFormat::Csv => {
+                                parsable_keys.push(ParsableFormat {
+                                    key: id.human_name.clone(),
+                                    choice_url: url,
+                                    platform: id.key_type.clone(),
+                                    url: None,
+                                    user_score: None,
+                                    price_us: None,
+                                })
+                            }
+                            OutputFormat::Text => {
+                                keys_amount += 1;
+                                id.display(keys_amount, url);
+                            }
                         }
                     }
                 }
@@ -165,23 +181,28 @@ async fn main() {
         } else {
             for id in order.tpkd_dict["all_tpks"].iter() {
                 if id.is_valid() {
-                    if !args.json {
-                        keys_amount += 1;
-                        id.display(keys_amount, None);
-                    } else {
-                        parsable_keys.push(ParsableFormat {
-                            key: id.human_name.clone(),
-                            choice_url: None,
-                            platform: id.key_type.clone(),
-                            extra: None,
-                        })
+                    match args.format {
+                        OutputFormat::Json | OutputFormat::Csv => {
+                            parsable_keys.push(ParsableFormat {
+                                key: id.human_name.clone(),
+                                choice_url: None,
+                                platform: id.key_type.clone(),
+                                url: None,
+                                user_score: None,
+                                price_us: None,
+                            });
+                        }
+                        OutputFormat::Text => {
+                            keys_amount += 1;
+                            id.display(keys_amount, None);
+                        }
                     }
                 }
             }
         }
     }
 
-    if args.json && args.steamdb {
+    if args.steamdb && args.format != OutputFormat::Text {
         let l = parsable_keys
             .iter()
             .filter(|k| k.platform == "steam")
@@ -201,7 +222,10 @@ async fn main() {
                 continue;
             }
 
-            key.extra = Some(s.search(&key.key).await);
+            let p = s.search(&key.key).await;
+            key.url = Some(p.url);
+            key.user_score = p.user_score;
+            key.price_us = Some(p.price_us);
             steamdb_pb.inc(1)
         }
 
@@ -209,9 +233,21 @@ async fn main() {
         steamdb_pb.finish_and_clear()
     }
 
-    if !args.json {
-        println!("\n{keys_amount} unclaimed keys!")
-    } else if let Ok(j) = serde_json::to_string(&parsable_keys) {
-        println!("{j}")
+    match args.format {
+        OutputFormat::Json => {
+            serde_json::to_writer(io::stdout(), &parsable_keys).unwrap();
+        }
+        OutputFormat::Csv => {
+            let mut wtr = csv::Writer::from_writer(io::stdout());
+
+            for key in parsable_keys {
+                wtr.serialize(key).unwrap();
+            }
+
+            wtr.flush().unwrap();
+        }
+        OutputFormat::Text => {
+            println!("\n{keys_amount} unclaimed keys!")
+        }
     }
 }
