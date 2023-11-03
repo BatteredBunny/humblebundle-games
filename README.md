@@ -2,7 +2,8 @@
 
 Simple CLI tool to display all unclaimed keys you have on your humble bundle account.
 
-![screenshot](screenshot.png)
+![normal text output](screenshot.png)
+![csv output opened in macos numbers](screenshot_csv.png)
 
 ```
 Humble bundle keys
