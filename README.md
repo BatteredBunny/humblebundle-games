@@ -37,7 +37,7 @@ nix run github:ayes-web/humblebundle-games -- --token {YOUR COOKIE}
 ## Output example
 
 ``
-cargo run -- --format json --steamdb
+cargo run --release -- --format json --steamdb
 ``
 
 ```json
