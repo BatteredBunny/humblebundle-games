@@ -22,7 +22,7 @@ Options:
 
 Find ``_simpleauth_sess`` cookie from browser and use it in token flag
 ```
-git clone https://github.com/ayes-web/humblebundle-games
+git clone https://github.com/BatteredBunny/humblebundle-games
 cd humblebundle-games
 cargo run --release -- --token {YOUR COOKIE}
 ```
@@ -30,7 +30,7 @@ cargo run --release -- --token {YOUR COOKIE}
 
 ## Run with nix flake
 ```
-nix run github:ayes-web/humblebundle-games -- --token {YOUR COOKIE}
+nix run github:BatteredBunny/humblebundle-games -- --token {YOUR COOKIE}
 ```
 
 
