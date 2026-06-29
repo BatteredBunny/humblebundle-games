@@ -1,5 +1,5 @@
-use crate::api::{AllTpks, Order, orders};
-use crate::month::{MonthPageOptionsDataEnum, MonthPageOptionsDataGamesChoiceEnum, month_games};
+use crate::api::{Order, orders};
+use crate::month::month_games;
 use clap::{CommandFactory, Parser, ValueEnum};
 use clap_complete::Shell;
 use futures::future;
@@ -123,8 +123,7 @@ async fn main() {
     let mut keys_amount = 0;
     for order in total_orders {
         if order.product.category == "subscriptioncontent"
-            && order.choices_remaining > 0
-            && let Some(choice_url) = order.product.choice_url
+            && let Some(choice_url) = order.product.choice_url.clone()
         {
             let pb = ProgressBar::new_spinner();
             pb.enable_steady_tick(Duration::from_millis(120));
@@ -135,47 +134,35 @@ async fn main() {
             let m = month_games(token.clone(), choice_url.clone()).await;
             pb.finish_and_clear();
 
-            for (_, choice) in match m.content_choice_options.content_choice_data {
-                MonthPageOptionsDataEnum::Initial { initial } => {
-                    initial.content_choices.into_iter()
-                }
-                MonthPageOptionsDataEnum::GameData { game_data } => game_data.into_iter(),
-                MonthPageOptionsDataEnum::Unknown {} => continue,
-            } {
-                for id in match choice.games {
-                    MonthPageOptionsDataGamesChoiceEnum::Tpkds(t) => t,
-                    MonthPageOptionsDataGamesChoiceEnum::NestedChoiceTpkds(t) => t
-                        .values()
-                        .cloned()
-                        .reduce(|mut acc, e| {
-                            acc.extend(e.iter().cloned());
-                            acc
-                        })
-                        .unwrap(),
-                } {
-                    if id.is_valid() {
-                        let url = Some(format!(
-                            "https://www.humblebundle.com/membership/{choice_url}",
-                        ));
+            if order.choices_remaining > 0 || m.product_is_choiceless {
+                let url = Some(format!(
+                    "https://www.humblebundle.com/membership/{choice_url}",
+                ));
 
+                for id in m.into_tpkds() {
+                    if id.is_valid() {
                         match args.format {
                             OutputFormat::Json | OutputFormat::Csv => {
                                 parsable_keys.push(ParsableFormat {
                                     key: id.human_name.clone(),
-                                    choice_url: url,
+                                    choice_url: url.clone(),
                                     platform: id.key_type.clone(),
                                 })
                             }
                             OutputFormat::Text => {
                                 keys_amount += 1;
-                                id.display(keys_amount, url);
+                                id.display(keys_amount, url.clone());
                             }
                         }
                     }
                 }
+
+                continue;
             }
-        } else {
-            for id in order.tpkd_dict["all_tpks"].iter() {
+        }
+
+        if let Some(tpkds) = order.tpkd_dict.get("all_tpks") {
+            for id in tpkds {
                 if id.is_valid() {
                     match args.format {
                         OutputFormat::Json | OutputFormat::Csv => {

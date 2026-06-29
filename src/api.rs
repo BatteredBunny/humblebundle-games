@@ -20,6 +20,7 @@ pub struct OrderProduct {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct AllTpks {
+    #[serde(default)]
     pub redeemed_key_val: Option<String>,
     pub human_name: String,
     pub is_expired: bool,
