@@ -1,8 +1,7 @@
-
-use serde::Deserialize;
-use scraper::{Selector, Html};
-use reqwest::Client;
 use crate::AllTpks;
+use reqwest::Client;
+use scraper::{Html, Selector};
+use serde::Deserialize;
 use std::collections::HashMap;
 
 #[derive(Deserialize)]

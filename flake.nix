@@ -1,33 +1,59 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = {
-    nixpkgs,
-    rust-overlay,
-    flake-utils,
-    ...
-  }:
-    flake-utils.lib.eachDefaultSystem (
-      system: let
-        overlays = [(import rust-overlay)];
-        pkgs = import nixpkgs {
-          inherit system overlays;
-        };
-        nightly-rust = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default);
-      in
-        with pkgs; {
-          devShells.default = mkShell {
-            buildInputs = [
-              nightly-rust
+  outputs =
+    {
+      self,
+      nixpkgs,
+      ...
+    }:
+    let
+      inherit (nixpkgs) lib;
+
+      systems = lib.systems.flakeExposed;
+
+      forAllSystems = lib.genAttrs systems;
+
+      nixpkgsFor = forAllSystems (
+        system:
+        import nixpkgs { inherit system; }
+      );
+    in
+    {
+
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgsFor.${system};
+        in
+        {
+          default = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              cargo
               openssl
               pkg-config
+              rustc
             ];
           };
-          packages.default = pkgs.callPackage ./build.nix {nightly-rust = nightly-rust;};
         }
-    );
+      );
+
+      overlays.default = final: prev: {
+        humblebundle-games = final.callPackage ./build.nix { };
+      };
+
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgsFor.${system};
+          overlay = lib.makeScope pkgs.newScope (final: self.overlays.default final pkgs);
+        in
+        {
+          inherit (overlay) humblebundle-games;
+          default = overlay.humblebundle-games;
+        }
+      );
+    };
 }

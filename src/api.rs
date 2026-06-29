@@ -1,7 +1,7 @@
 use indicatif::ProgressBar;
+use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashMap;
-use reqwest::Client;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Order {
