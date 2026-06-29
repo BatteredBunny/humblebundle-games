@@ -49,26 +49,55 @@ pub struct SearchResult {
 }
 
 impl SteamDB {
-    pub async fn new() -> SteamDB {
-        let re = Regex::new(r#"t=algoliasearch\("(.+)","(.+)"\);"#).unwrap();
+    pub async fn new() -> Option<SteamDB> {
+        if let Some((id, key)) = Self::legacy_credentials().await {
+            return Some(Self::from_credentials(id, key));
+        }
 
+        if let Some((id, key)) = Self::search_page_credentials().await {
+            return Some(Self::from_credentials(id, key));
+        }
+
+        eprintln!("warning: could not discover SteamDB search credentials; skipping SteamDB data");
+        None
+    }
+
+    fn from_credentials(id: String, api_key: String) -> SteamDB {
+        SteamDB {
+            url: format!("https://{id}-dsn.algolia.net/1/indexes/*/queries"),
+            id,
+            api_key,
+        }
+    }
+
+    async fn legacy_credentials() -> Option<(String, String)> {
+        let re = Regex::new(r#"algoliasearch\("([^"]+)","([^"]+)"\)"#).unwrap();
         let body = reqwest::get("https://steamdb.info/static/js/instantsearch.js")
             .await
-            .unwrap()
+            .ok()?
             .text()
             .await
-            .unwrap();
+            .ok()?;
+        let captures = re.captures(&body)?;
+        Some((
+            captures.get(1)?.as_str().to_string(),
+            captures.get(2)?.as_str().to_string(),
+        ))
+    }
 
-        let m = re.captures(&body).unwrap();
-
-        let id = m.get(1).unwrap().as_str();
-        let key = m.get(2).unwrap().as_str();
-
-        SteamDB {
-            id: id.to_string(),
-            url: format!("https://{id}-dsn.algolia.net/1/indexes/*/queries"),
-            api_key: key.to_string(),
-        }
+    async fn search_page_credentials() -> Option<(String, String)> {
+        let id_re = Regex::new(r#"data-a="([^"]+)""#).unwrap();
+        let key_re = Regex::new(r#"data-k="([^"]+)""#).unwrap();
+        let body = reqwest::get("https://steamdb.info/search/?a=app")
+            .await
+            .ok()?
+            .text()
+            .await
+            .ok()?;
+        Some((
+            id_re.captures(&body)?.get(1)?.as_str().to_string(),
+            key_re.captures(&body)?.get(1)?.as_str().to_string(),
+        ))
     }
 
     pub async fn search(&self, query: &str) -> SearchResult {

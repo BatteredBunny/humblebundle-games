@@ -1,7 +1,8 @@
 use crate::api::{AllTpks, Order, orders};
 use crate::month::{MonthPageOptionsDataEnum, MonthPageOptionsDataGamesChoiceEnum, month_games};
 use crate::steamdb::SteamDB;
-use clap::{Parser, ValueEnum};
+use clap::{CommandFactory, Parser, ValueEnum};
+use clap_complete::Shell;
 use futures::future;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
@@ -12,6 +13,7 @@ use std::io;
 use std::time::Duration;
 
 mod api;
+mod cookies;
 mod month;
 mod steamdb;
 
@@ -28,9 +30,9 @@ enum OutputFormat {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// _simpleauth_sess cookie value
+    /// _simpleauth_sess cookie value. If omitted, Firefox cookies are used.
     #[arg(short, long)]
-    token: String,
+    token: Option<String>,
 
     /// adds steamdb info to parsable formats like json and csv
     #[arg(short, long)]
@@ -39,6 +41,16 @@ struct Args {
     /// format to output data in
     #[arg(short, long, default_value_t, value_enum)]
     format: OutputFormat,
+
+    /// Print shell completions for the given shell to stdout and exit
+    #[arg(long, value_enum, value_name = "SHELL")]
+    completions: Option<Shell>,
+}
+
+fn print_completions(shell: Shell) {
+    let mut command = Args::command();
+    let name = command.get_name().to_string();
+    clap_complete::generate(shell, &mut command, name, &mut std::io::stdout());
 }
 
 #[derive(Deserialize, Debug)]
@@ -83,19 +95,24 @@ struct ParsableFormat {
 async fn main() {
     let args = Args::parse();
 
-    let s: SteamDB = if args.steamdb {
+    if let Some(shell) = args.completions {
+        print_completions(shell);
+        return;
+    }
+
+    let token = args.token.clone().or_else(cookies::load).expect(
+        "missing _simpleauth_sess cookie; pass --token or log in to humblebundle.com in Firefox",
+    );
+
+    let steamdb = if args.steamdb && args.format != OutputFormat::Text {
         SteamDB::new().await
     } else {
-        SteamDB {
-            id: String::new(),
-            url: String::new(),
-            api_key: String::new(),
-        }
+        None
     };
 
     let mut parsable_keys: Vec<ParsableFormat> = vec![];
 
-    let keys = keys_page(args.token.clone()).await;
+    let keys = keys_page(token.clone()).await;
     let chunks = keys.gamekeys.chunks(40);
     let keys_progressbar = ProgressBar::new(chunks.len() as u64);
     keys_progressbar.set_style(
@@ -107,7 +124,7 @@ async fn main() {
     keys_progressbar.set_message("Searching for keys");
 
     let total_orders: Vec<Order> =
-        future::join_all(chunks.map(|chunk| orders(args.token.clone(), chunk, &keys_progressbar)))
+        future::join_all(chunks.map(|chunk| orders(token.clone(), chunk, &keys_progressbar)))
             .await
             .into_par_iter()
             .reduce_with(|mut acc, e| {
@@ -131,7 +148,7 @@ async fn main() {
                 "Searching for keys from {}",
                 order.product.human_name
             ));
-            let m = month_games(args.token.clone(), choice_url.clone()).await;
+            let m = month_games(token.clone(), choice_url.clone()).await;
             pb.finish_and_clear();
 
             for (_, choice) in match m.content_choice_options.content_choice_data {
@@ -200,7 +217,7 @@ async fn main() {
         }
     }
 
-    if args.steamdb && args.format != OutputFormat::Text {
+    if let Some(steamdb) = steamdb {
         let l = parsable_keys
             .iter()
             .filter(|k| k.platform == "steam")
@@ -220,7 +237,7 @@ async fn main() {
                 continue;
             }
 
-            let p = s.search(&key.key).await;
+            let p = steamdb.search(&key.key).await;
             key.url = Some(p.url);
             key.user_score = p.user_score;
             key.price_us = Some(p.price_us);
