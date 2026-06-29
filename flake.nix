@@ -55,5 +55,9 @@
           default = overlay.humblebundle-games;
         }
       );
+
+      checks = forAllSystems (system: {
+        package = self.packages.${system}.default;
+      });
     };
 }
