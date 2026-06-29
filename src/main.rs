@@ -1,6 +1,5 @@
 use crate::api::{AllTpks, Order, orders};
 use crate::month::{MonthPageOptionsDataEnum, MonthPageOptionsDataGamesChoiceEnum, month_games};
-use crate::steamdb::SteamDB;
 use clap::{CommandFactory, Parser, ValueEnum};
 use clap_complete::Shell;
 use futures::future;
@@ -15,7 +14,6 @@ use std::time::Duration;
 mod api;
 mod cookies;
 mod month;
-mod steamdb;
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Default)]
 enum OutputFormat {
@@ -33,10 +31,6 @@ struct Args {
     /// _simpleauth_sess cookie value. If omitted, Firefox cookies are used.
     #[arg(short, long)]
     token: Option<String>,
-
-    /// adds steamdb info to parsable formats like json and csv
-    #[arg(short, long)]
-    steamdb: bool,
 
     /// format to output data in
     #[arg(short, long, default_value_t, value_enum)]
@@ -85,10 +79,6 @@ struct ParsableFormat {
     key: String,
     choice_url: Option<String>,
     platform: String,
-
-    url: Option<String>,
-    user_score: Option<f64>,
-    price_us: Option<f64>,
 }
 
 #[tokio::main]
@@ -103,12 +93,6 @@ async fn main() {
     let token = args.token.clone().or_else(cookies::load).expect(
         "missing _simpleauth_sess cookie; pass --token or log in to humblebundle.com in Firefox",
     );
-
-    let steamdb = if args.steamdb && args.format != OutputFormat::Text {
-        SteamDB::new().await
-    } else {
-        None
-    };
 
     let mut parsable_keys: Vec<ParsableFormat> = vec![];
 
@@ -180,9 +164,6 @@ async fn main() {
                                     key: id.human_name.clone(),
                                     choice_url: url,
                                     platform: id.key_type.clone(),
-                                    url: None,
-                                    user_score: None,
-                                    price_us: None,
                                 })
                             }
                             OutputFormat::Text => {
@@ -202,9 +183,6 @@ async fn main() {
                                 key: id.human_name.clone(),
                                 choice_url: None,
                                 platform: id.key_type.clone(),
-                                url: None,
-                                user_score: None,
-                                price_us: None,
                             });
                         }
                         OutputFormat::Text => {
@@ -215,37 +193,6 @@ async fn main() {
                 }
             }
         }
-    }
-
-    if let Some(steamdb) = steamdb {
-        let l = parsable_keys
-            .iter()
-            .filter(|k| k.platform == "steam")
-            .count();
-
-        let steamdb_pb = ProgressBar::new(l as u64);
-        steamdb_pb.set_style(
-            ProgressStyle::with_template("{prefix:.bold.dim}[{pos}/{len}] {spinner} {wide_msg}")
-                .unwrap()
-                .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
-        );
-        steamdb_pb.enable_steady_tick(Duration::from_millis(120));
-        steamdb_pb.set_message("Adding extra info from steamdb");
-
-        for key in parsable_keys.iter_mut() {
-            if key.platform != "steam" {
-                continue;
-            }
-
-            let p = steamdb.search(&key.key).await;
-            key.url = Some(p.url);
-            key.user_score = p.user_score;
-            key.price_us = Some(p.price_us);
-            steamdb_pb.inc(1)
-        }
-
-        steamdb_pb.set_message("Finished fetching extra info from steamdb");
-        steamdb_pb.finish_and_clear()
     }
 
     match args.format {
